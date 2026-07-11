@@ -1,12 +1,11 @@
 import os
 import json
+import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Dict, Any
-from google import genai
-from google.genai import types
 
 app = FastAPI()
 
@@ -17,32 +16,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-# HOW THE TOKEN WORKS:
-# This grabs the AIpipe token you pasted into Render's Environment Variables.
-# It then forces all traffic to go to aipipe.org using their specific Bearer header.
-# ---------------------------------------------------------
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("GEMINI_API_KEY environment variable is missing in Render.")
-
-client = genai.Client(
-    api_key=api_key, 
-    http_options={
-        'base_url': 'https://aipipe.org',
-        'headers': {
-            'Authorization': f'Bearer {api_key}'
-        }
-    }
-)
-# ---------------------------------------------------------
-
 class DynamicExtractRequest(BaseModel):
     text: str
     schema_def: Dict[str, str] = Field(alias="schema") 
 
 @app.post("/dynamic-extract")
-async def dynamic_extract(payload: DynamicExtractRequest):
+def dynamic_extract(payload: DynamicExtractRequest):
+    # Grabs the AI Pipe token from Render Environment Variables
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY missing in Render")
+        
+    # 1. Build the schema dictionary
     runtime_schema = {
         "type": "OBJECT",
         "properties": {},
@@ -79,19 +64,41 @@ async def dynamic_extract(payload: DynamicExtractRequest):
         "5. EXACT EXTRACTION: Extract the exact raw phrase from the source text. Do NOT add periods, do NOT alter capitalization, and do NOT add conversational filler like 'The' to make it a complete sentence."
     )
 
+    # 2. EXACT AI Pipe URL and Headers from their documentation
+    url = "https://aipipe.org/geminiv1beta/models/gemini-1.5-flash:generateContent"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    # 3. Construct the exact REST payload for Gemini
+    payload_data = {
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        },
+        "contents": [
+            {
+                "parts": [{"text": payload.text}]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.0,
+            "responseMimeType": "application/json",
+            "responseSchema": runtime_schema
+        }
+    }
+
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=payload.text,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=runtime_schema,
-                system_instruction=system_instruction,
-                temperature=0.0 
-            )
-        )
+        # 4. Make the direct request, bypassing SDK routing issues
+        response = requests.post(url, headers=headers, json=payload_data)
+        response.raise_for_status() 
         
-        raw_text = response.text.strip()
+        data = response.json()
+        
+        # Extract the text from the response structure
+        raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        
+        # Clean up Markdown blocks if Gemini included them
         if raw_text.startswith("```"):
             raw_text = raw_text.split("\n", 1)[-1]
         if raw_text.endswith("```"):
@@ -101,8 +108,11 @@ async def dynamic_extract(payload: DynamicExtractRequest):
         return json.loads(raw_text)
         
     except Exception as e:
-        print(f"CRITICAL EXTRACTION ERROR: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        if isinstance(e, requests.exceptions.HTTPError):
+            error_msg += f" - Response Text: {response.text}"
+        print(f"CRITICAL EXTRACTION ERROR: {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
