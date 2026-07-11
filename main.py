@@ -18,10 +18,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
+aipipe_token = os.getenv("GEMINI_API_KEY") 
+if not aipipe_token:
     raise ValueError("GEMINI_API_KEY environment variable is missing.")
-client = genai.Client(api_key=api_key)
+
+# 2. Force the Google SDK to use the AIpipe proxy and headers
+client = genai.Client(
+    api_key=aipipe_token, 
+    http_options={
+        'base_url': 'https://aipipe.org',
+        'headers': {
+            'Authorization': f'Bearer {eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjI0ZjIwMDMyMTVAZHMuc3R1ZHkuaWl0bS5hYy5pbiIsImlhdCI6MTc4Mzc3NDI2MywiaXNzIjoiaHR0cHM6Ly9haXBpcGUub3JnIiwiYXVkIjoiYWlwaXBlLWFwaSIsImV4cCI6MTc4NDM3OTA2M30.k_tnHM6rVkF9ZB-EryUBVrv26HIGRH-sO8hmMfyPEp0}'
+        }
+    }
+)
 
 class DynamicExtractRequest(BaseModel):
     text: str
@@ -29,7 +39,6 @@ class DynamicExtractRequest(BaseModel):
 
 @app.post("/dynamic-extract")
 async def dynamic_extract(payload: DynamicExtractRequest):
-    # 1. Safely construct a pure dictionary schema
     runtime_schema = {
         "type": "OBJECT",
         "properties": {},
@@ -39,7 +48,6 @@ async def dynamic_extract(payload: DynamicExtractRequest):
     for key, field_type in payload.schema_def.items():
         field_type_lower = field_type.lower()
         
-        # Added boolean just in case the grader tests for it
         if field_type_lower == "integer":
             target_type = "INTEGER"
         elif field_type_lower == "float":
@@ -57,7 +65,6 @@ async def dynamic_extract(payload: DynamicExtractRequest):
         }
         runtime_schema["required"].append(key)
 
-    # 2. Strict instruction set (keeping your exact phrase extraction rule)
     system_instruction = (
         "You are a strict data extraction API. Extract information from the text exactly matching the provided schema.\n"
         "CRITICAL RULES:\n"
@@ -80,21 +87,16 @@ async def dynamic_extract(payload: DynamicExtractRequest):
             )
         )
         
-        # 3. Bulletproof JSON parsing: Strip markdown if it exists
         raw_text = response.text.strip()
         if raw_text.startswith("```"):
-            # Strip the opening ```json or ```
             raw_text = raw_text.split("\n", 1)[-1]
         if raw_text.endswith("```"):
-            # Strip the closing ```
             raw_text = raw_text.rsplit("\n", 1)[0]
             
         raw_text = raw_text.strip()
-        
         return json.loads(raw_text)
         
     except Exception as e:
-        # Print the exact error to Render logs so we can see what failed
         print(f"CRITICAL EXTRACTION ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
