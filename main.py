@@ -22,12 +22,10 @@ class DynamicExtractRequest(BaseModel):
 
 @app.post("/dynamic-extract")
 def dynamic_extract(payload: DynamicExtractRequest):
-    # Grabs the AI Pipe token from Render Environment Variables
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY missing in Render")
         
-    # 1. Build the schema dictionary
     runtime_schema = {
         "type": "OBJECT",
         "properties": {},
@@ -64,14 +62,14 @@ def dynamic_extract(payload: DynamicExtractRequest):
         "5. EXACT EXTRACTION: Extract the exact raw phrase from the source text. Do NOT add periods, do NOT alter capitalization, and do NOT add conversational filler like 'The' to make it a complete sentence."
     )
 
-    # 2. EXACT AI Pipe URL and Headers from their documentation
-    url = "https://aipipe.org/geminiv1beta/models/gemini-1.5-flash:generateContent"
+    # UPDATED URL: Using 2.5-flash which we know exists and you have access to
+    url = "https://aipipe.org/geminiv1beta/models/gemini-2.5-flash:generateContent"
+    
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
-    # 3. Construct the exact REST payload for Gemini
     payload_data = {
         "systemInstruction": {
             "parts": [{"text": system_instruction}]
@@ -89,16 +87,13 @@ def dynamic_extract(payload: DynamicExtractRequest):
     }
 
     try:
-        # 4. Make the direct request, bypassing SDK routing issues
         response = requests.post(url, headers=headers, json=payload_data)
         response.raise_for_status() 
         
         data = response.json()
         
-        # Extract the text from the response structure
         raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
         
-        # Clean up Markdown blocks if Gemini included them
         if raw_text.startswith("```"):
             raw_text = raw_text.split("\n", 1)[-1]
         if raw_text.endswith("```"):
