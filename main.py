@@ -52,17 +52,18 @@ def dynamic_extract(payload: DynamicExtractRequest):
         }
         runtime_schema["required"].append(key)
 
+    # HYPER-STRICT PROMPT to prevent the LLM from adding "The" or punctuation
     system_instruction = (
-        "You are a strict data extraction API. Extract information from the text exactly matching the provided schema.\n"
+        "You are a strict JSON data extraction API. Your job is to extract exact substrings.\n"
         "CRITICAL RULES:\n"
-        "1. Return exactly the keys requested. No extra keys, no missing keys.\n"
-        "2. If a field's value cannot be definitively found in the text, you MUST set its value to null.\n"
-        "3. Dates must be formatted as YYYY-MM-DD.\n"
-        "4. Integers and floats must be valid JSON numbers, not strings.\n"
-        "5. EXACT EXTRACTION: Extract the exact raw phrase from the source text. Do NOT add periods, do NOT alter capitalization, and do NOT add conversational filler like 'The' to make it a complete sentence."
+        "1. EXACT STRING MATCHING: When extracting text, you MUST copy the exact characters from the source text. Do NOT add missing articles (like 'a', 'an', 'the'). Do NOT fix grammar. Do NOT add periods at the end.\n"
+        "2. EXAMPLE: If extracting an issue and the text says 'laptop arrived damaged', return exactly 'laptop arrived damaged'. NEVER return 'The laptop arrived damaged.'\n"
+        "3. Return exactly the keys requested. No extra keys, no missing keys.\n"
+        "4. If a field cannot be found, you MUST set its value to null.\n"
+        "5. Dates must be formatted as YYYY-MM-DD.\n"
+        "6. Integers/floats must be valid JSON numbers, not strings."
     )
 
-    # UPDATED URL: Using 2.5-flash which we know exists and you have access to
     url = "https://aipipe.org/geminiv1beta/models/gemini-2.5-flash:generateContent"
     
     headers = {
@@ -94,6 +95,7 @@ def dynamic_extract(payload: DynamicExtractRequest):
         
         raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
         
+        # Clean up Markdown blocks if Gemini included them
         if raw_text.startswith("```"):
             raw_text = raw_text.split("\n", 1)[-1]
         if raw_text.endswith("```"):
