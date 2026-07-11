@@ -52,16 +52,17 @@ def dynamic_extract(payload: DynamicExtractRequest):
         }
         runtime_schema["required"].append(key)
 
-    # HYPER-STRICT PROMPT to prevent the LLM from adding "The" or punctuation
+    # UPDATED SYSTEM INSTRUCTION: Added Rule #2 specifically for the "Acct 7890" issue
     system_instruction = (
         "You are a strict JSON data extraction API. Your job is to extract exact substrings.\n"
         "CRITICAL RULES:\n"
-        "1. EXACT STRING MATCHING: When extracting text, you MUST copy the exact characters from the source text. Do NOT add missing articles (like 'a', 'an', 'the'). Do NOT fix grammar. Do NOT add periods at the end.\n"
-        "2. EXAMPLE: If extracting an issue and the text says 'laptop arrived damaged', return exactly 'laptop arrived damaged'. NEVER return 'The laptop arrived damaged.'\n"
-        "3. Return exactly the keys requested. No extra keys, no missing keys.\n"
-        "4. If a field cannot be found, you MUST set its value to null.\n"
-        "5. Dates must be formatted as YYYY-MM-DD.\n"
-        "6. Integers/floats must be valid JSON numbers, not strings."
+        "1. EXACT STRING MATCHING: When extracting text, copy the exact characters. Do NOT add missing articles (like 'a', 'an', 'the'). Do NOT fix grammar. Do NOT add periods at the end.\n"
+        "2. ENTITY NAMES ONLY: If extracting a name (like a bank, vendor, or store), extract ONLY the core name. Do NOT include account numbers, IDs, or extra context (e.g., if the text says 'HDFC Acct 7890', return exactly 'HDFC').\n"
+        "3. EXAMPLE: If extracting an issue and the text says 'laptop arrived damaged', return exactly 'laptop arrived damaged'. NEVER return 'The laptop arrived damaged.'\n"
+        "4. Return exactly the keys requested. No extra keys, no missing keys.\n"
+        "5. If a field cannot be found, you MUST set its value to null.\n"
+        "6. Dates must be formatted as YYYY-MM-DD.\n"
+        "7. Integers/floats must be valid JSON numbers, not strings."
     )
 
     url = "https://aipipe.org/geminiv1beta/models/gemini-2.5-flash:generateContent"
