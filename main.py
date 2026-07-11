@@ -52,13 +52,14 @@ def dynamic_extract(payload: DynamicExtractRequest):
         }
         runtime_schema["required"].append(key)
 
-    # UPDATED SYSTEM INSTRUCTION: Added Rule #2 specifically for the "Acct 7890" issue
+    # THE ULTIMATE STRICT PROMPT
+    # Added explicit rules against trailing punctuation and combined all edge cases.
     system_instruction = (
-        "You are a strict JSON data extraction API. Your job is to extract exact substrings.\n"
+        "You are a hyper-strict JSON data extraction API. Your job is to extract exact substrings.\n"
         "CRITICAL RULES:\n"
-        "1. EXACT STRING MATCHING: When extracting text, copy the exact characters. Do NOT add missing articles (like 'a', 'an', 'the'). Do NOT fix grammar. Do NOT add periods at the end.\n"
-        "2. ENTITY NAMES ONLY: If extracting a name (like a bank, vendor, or store), extract ONLY the core name. Do NOT include account numbers, IDs, or extra context (e.g., if the text says 'HDFC Acct 7890', return exactly 'HDFC').\n"
-        "3. EXAMPLE: If extracting an issue and the text says 'laptop arrived damaged', return exactly 'laptop arrived damaged'. NEVER return 'The laptop arrived damaged.'\n"
+        "1. NO TRAILING PUNCTUATION: If an extracted entity ends with a period, comma, or semicolon that belongs to the sentence, REMOVE IT. (e.g., 'DataSys Ltd.' MUST become 'DataSys Ltd').\n"
+        "2. ENTITY NAMES ONLY: Extract ONLY the core name. Strip account numbers, IDs, and extra context. (e.g., 'HDFC Acct 7890' MUST become 'HDFC').\n"
+        "3. NO GRAMMAR FIXES: Do NOT add missing articles ('a', 'an', 'the'). Do NOT fix grammar. (e.g., 'laptop arrived damaged' MUST remain 'laptop arrived damaged').\n"
         "4. Return exactly the keys requested. No extra keys, no missing keys.\n"
         "5. If a field cannot be found, you MUST set its value to null.\n"
         "6. Dates must be formatted as YYYY-MM-DD.\n"
