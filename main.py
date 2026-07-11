@@ -67,11 +67,12 @@ async def dynamic_extract(payload: DynamicExtractRequest):
     # 2. Set strict extraction rules
     system_instruction = (
         "You are a strict data extraction API. Extract information from the text exactly matching the provided schema.\n"
-        "RULES:\n"
+        "CRITICAL RULES:\n"
         "1. Return exactly the keys requested. No extra keys, no missing keys.\n"
         "2. If a field's value cannot be definitively found in the text, you MUST set its value to null.\n"
         "3. Dates must be formatted as YYYY-MM-DD.\n"
-        "4. Integers and floats must be valid JSON numbers, not strings."
+        "4. Integers and floats must be valid JSON numbers, not strings.\n"
+        "5. EXACT EXTRACTION: Extract the exact raw phrase from the source text. Do NOT add periods, do NOT alter capitalization, and do NOT add conversational filler like 'The' to make it a complete sentence. If the raw text is 'laptop arrived damaged', return exactly that."
     )
 
     try:
